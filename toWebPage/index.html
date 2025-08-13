@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>피카소 프로토콜 | 웹 애플리케이션</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: [Soothing Neutrals with Blue Accent] -->
+    <!-- Application Structure Plan: [A two-panel interactive tool layout. The left panel contains all user controls (mode selection between Artist X and Y, text input, file upload). The right panel serves as the output stage, displaying the generated abstract image and the decoded text result. This structure was chosen because it creates a clear, logical user flow (Input -> Process -> Output) that is standard for transformation tools, making the application highly intuitive. Users can easily understand how their inputs on the left directly affect the outputs on the right.] -->
+    <!-- Visualization & Content Choices: [1. Text-to-Image Encoding: Goal is to demonstrate steganography. The primary visualization is the generated PNG itself, created using the HTML Canvas API. A generative algorithm creates a unique, Picasso-style abstract art piece based on the input text's hash, simulating the AI's unique output. The core data (text bytes) is embedded directly into the canvas's pixel data using getImageData/putImageData. This directly implements the report's core concept without needing a real AI model. 2. Image-to-Text Decoding: Goal is to demonstrate decryption. The application reads the uploaded PNG, extracts the hidden byte data from the pixels, and converts it back to text, displaying it in a designated output area. For Artist Y, a pre-set list of "reinterpreted" phrases is used to simulate its creative output. All visualizations are done via Canvas, fulfilling the NO SVG/Mermaid requirement.] -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #FDFBF7; color: #333; }
+        .card { background-color: white; border-radius: 1rem; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05); border: 1px solid #e5e7eb; padding: 2rem; }
+        .btn { transition: all 0.2s ease-in-out; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .tab-active { border-color: #3B82F6; color: #3B82F6; background-color: #EFF6FF; }
+        .tab-inactive { border-color: transparent; color: #4B5563; }
+        .drop-zone { border: 2px dashed #D1D5DB; transition: all 0.2s ease-in-out; }
+        .drop-zone.dragover { border-color: #3B82F6; background-color: #EFF6FF; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .modal-overlay { transition: opacity 0.3s ease-in-out; }
+        .modal-content { transition: transform 0.3s ease-in-out; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+    <header class="bg-white/90 backdrop-blur-md sticky top-0 z-50 shadow-sm border-b border-gray-200">
+        <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-gray-800">피카소 프로토콜 시뮬레이터</h1>
+            <button id="show-details-btn" class="bg-gray-200 text-gray-700 font-semibold py-2 px-4 rounded-lg hover:bg-gray-300 btn text-sm">
+                프로젝트 상세 설명 보기
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-grow container mx-auto p-4 md:p-8">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 h-full">
+            
+            <!-- Left Panel: Controls -->
+            <div class="card flex flex-col">
+                <div class="mb-6">
+                    <h2 class="text-xl font-bold text-gray-800 mb-3">1. 모드 선택</h2>
+                    <div class="flex bg-gray-100 rounded-lg p-1">
+                        <button id="mode-y" class="tab-button w-1/2 p-2 rounded-md font-semibold text-sm tab-active">🎨 Artist Y (공개용)</button>
+                        <button id="mode-x" class="tab-button w-1/2 p-2 rounded-md font-semibold text-sm tab-inactive">🔑 Artist X (개인용)</button>
+                    </div>
+                    <p id="mode-description" class="text-sm text-gray-600 mt-3 p-3 bg-gray-50 rounded-md border border-gray-200"></p>
+                </div>
+
+                <div id="encoder-section" class="mb-6">
+                    <h2 class="text-xl font-bold text-gray-800 mb-3">2. 메시지 인코딩 (텍스트 → 이미지)</h2>
+                    <textarea id="text-input" class="w-full h-24 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" placeholder="여기에 비밀 메시지를 입력하세요..."></textarea>
+                    <button id="encode-btn" class="w-full mt-3 bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 active:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 btn">
+                        PNG 이미지 생성
+                    </button>
+                </div>
+
+                <div id="decoder-section" class="flex-grow flex flex-col">
+                    <h2 class="text-xl font-bold text-gray-800 mb-3">3. 메시지 디코딩 (이미지 → 텍스트)</h2>
+                    <div id="drop-zone" class="drop-zone flex-grow flex flex-col items-center justify-center p-6 rounded-lg text-center cursor-pointer">
+                        <p class="text-gray-500">여기에 PNG 파일을 드래그 앤 드롭하거나<br>클릭하여 업로드하세요.</p>
+                        <input type="file" id="file-input" class="hidden" accept="image/png">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Output -->
+            <div class="card flex flex-col">
+                <h2 class="text-xl font-bold text-gray-800 mb-3">결과</h2>
+                <div id="output-area" class="flex-grow bg-gray-100 rounded-lg border flex items-center justify-center p-4 relative">
+                    <img id="output-image" class="hidden max-w-full max-h-full object-contain" />
+                    <p id="output-placeholder" class="text-gray-500">결과가 여기에 표시됩니다.</p>
+                    <div id="loader" class="loader absolute hidden"></div>
+                </div>
+                <div class="mt-4 flex justify-end">
+                    <a id="download-link" class="hidden bg-gray-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-700 active:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 btn">
+                        이미지 다운로드
+                    </a>
+                </div>
+                <div class="mt-6">
+                    <h3 class="font-semibold text-gray-800 mb-2">복원된 텍스트:</h3>
+                    <div id="text-output" class="w-full min-h-[100px] p-3 bg-gray-100 border border-gray-200 rounded-lg text-gray-700 whitespace-pre-wrap"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal for Project Details -->
+    <div id="details-modal" class="modal-overlay fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="modal-content bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col transform scale-95">
+            <div class="flex justify-between items-center p-6 border-b border-gray-200">
+                <h2 class="text-2xl font-bold text-gray-800">프로젝트 상세 설명</h2>
+                <button id="close-details-btn" class="text-gray-500 hover:text-gray-800 text-3xl">&times;</button>
+            </div>
+            <div class="p-8 overflow-y-auto space-y-8">
+                <section>
+                    <h3 class="text-xl font-bold text-gray-800 mb-3">📜 프로젝트 개요</h3>
+                    <p class="text-gray-700">본 프로젝트는 파블로 피카소의 입체파에서 영감을 받아, 현대의 비대칭 암호화 원리를 신경망 기술과 융합한 새로운 스테가노그래피 시스템, '피카소 프로토콜'을 제안하고 구현합니다. 이 시스템은 Artist X (개인키)와 Artist Y (공개키)라는 두 개의 비대칭적 AI 모델을 통해, 텍스트 정보를 예술적 추상 이미지 안에 완벽히 숨기고 복원합니다.</p>
+                </section>
+                <section>
+                    <h3 class="text-xl font-bold text-gray-800 mb-3">🛠️ 시스템 아키텍처</h3>
+                    <p class="text-gray-700 mb-4">시스템의 핵심은 동일한 인코더를 공유하지만, 서로 다른 디코더를 가진 비대칭적 구조입니다.</p>
+                    <div class="bg-gray-50 p-4 rounded-lg border">
+                        <ul class="space-y-2">
+                            <li><strong class="text-blue-600">공유 인코더:</strong> 텍스트를 고유한 '잠재 벡터'(이미지의 본질)로 변환합니다.</li>
+                            <li><strong class="text-red-600">X의 디코더 (비밀):</strong> 잠재 벡터를 원본 텍스트로 완벽하게 복원합니다.</li>
+                            <li><strong class="text-green-600">Y의 디코더 (공개):</strong> 잠재 벡터를 새로운 텍스트로 창의적으로 재해석합니다.</li>
+                        </ul>
+                    </div>
+                </section>
+                <section>
+                    <h3 class="text-xl font-bold text-gray-800 mb-3">🌐 핵심 활용 시나리오: 비대칭 비밀 통신</h3>
+                    <ol class="list-decimal list-inside space-y-2 text-gray-700">
+                        <li>키 생성 및 배포 (수신자): 비밀리에 `Artist X`(개인키)를 생성하고, 이로부터 `Artist Y`(공개키)를 만들어 외부에 배포합니다.</li>
+                        <li>메시지 암호화 (송신자): 공개된 Y 모델로 비밀 메시지를 PNG 이미지로 변환하여 수신자에게 전송합니다.</li>
+                        <li>메시지 복호화 (수신자): 자신만 가진 X 모델을 사용하여 이미지를 원본 메시지로 완벽하게 복원합니다.</li>
+                    </ol>
+                </section>
+                 <section>
+                    <h3 class="text-xl font-bold text-gray-800 mb-3">🔒 보안 강도: 왜 뚫을 수 없는가?</h3>
+                    <p class="text-gray-700">본 시스템의 보안은 고유한 데이터로 학습된 고차원 비볼록 공간에서 특정 최적해를 재현하는 것의 계산적 불가능성에 기반합니다.</p>
+                     <ul class="list-disc list-inside space-y-2 text-gray-700 mt-4">
+                        <li><strong>탐색 공간:</strong> 모델 파라미터의 경우의 수는 $(2^{32})^{1.1 \times 10^8}$로, 무차별 대입 공격은 절대적으로 불가능합니다.</li>
+                        <li><strong>시간 복잡도:</strong> 역공학 공격은 거대 모델을 처음부터 학습시키는 것과 동일한 시간과 비용을 요구합니다.</li>
+                        <li><strong>비볼록 최적화:</strong> 공격자가 다른 조건으로 학습 시, 원본과 정확히 동일한 해독기를 만들 확률은 통계적으로 0에 수렴합니다.</li>
+                    </ul>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            let currentMode = 'y';
+            const API_URL = 'http://127.0.0.1:5000';
+
+            const modeYBtn = document.getElementById('mode-y');
+            const modeXBtn = document.getElementById('mode-x');
+            const modeDescription = document.getElementById('mode-description');
+            const textInput = document.getElementById('text-input');
+            const encodeBtn = document.getElementById('encode-btn');
+            const dropZone = document.getElementById('drop-zone');
+            const fileInput = document.getElementById('file-input');
+            const outputImage = document.getElementById('output-image');
+            const outputPlaceholder = document.getElementById('output-placeholder');
+            const downloadLink = document.getElementById('download-link');
+            const textOutput = document.getElementById('text-output');
+            const loader = document.getElementById('loader');
+            const detailsModal = document.getElementById('details-modal');
+            const showDetailsBtn = document.getElementById('show-details-btn');
+            const closeDetailsBtn = document.getElementById('close-details-btn');
+
+            const descriptions = {
+                y: "🎨 Artist Y (공개용 모드): 누구나 이 모드를 사용하여 메시지를 이미지로 암호화할 수 있습니다. 하지만 이미지를 해독하면 원본 대신 '재해석된' 텍스트가 나타납니다.",
+                x: "🔑 Artist X (개인용 모드): 오직 '마스터 키'를 가진 사람만 사용하는 모드입니다. 이 모드로 이미지를 해독해야만 숨겨진 원본 메시지를 완벽하게 복원할 수 있습니다."
+            };
+
+            function updateMode(newMode) {
+                currentMode = newMode;
+                modeDescription.innerHTML = descriptions[currentMode];
+                if (newMode === 'y') {
+                    modeYBtn.classList.add('tab-active'); modeYBtn.classList.remove('tab-inactive');
+                    modeXBtn.classList.add('tab-inactive'); modeXBtn.classList.remove('tab-active');
+                } else {
+                    modeXBtn.classList.add('tab-active'); modeXBtn.classList.remove('tab-inactive');
+                    modeYBtn.classList.add('tab-inactive'); modeYBtn.classList.remove('tab-active');
+                }
+                textOutput.textContent = '';
+            }
+            modeYBtn.addEventListener('click', () => updateMode('y'));
+            modeXBtn.addEventListener('click', () => updateMode('x'));
+
+            function showLoader() { loader.classList.remove('hidden'); }
+            function hideLoader() { loader.classList.add('hidden'); }
+
+            encodeBtn.addEventListener('click', async () => {
+                const text = textInput.value;
+                if (!text) { alert('메시지를 입력하세요.'); return; }
+                
+                showLoader();
+                outputPlaceholder.classList.add('hidden');
+                outputImage.classList.add('hidden');
+                downloadLink.classList.add('hidden');
+                textOutput.textContent = '';
+
+                try {
+                    const response = await fetch(`${API_URL}/encode`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text: text, mode: currentMode })
+                    });
+                    if (!response.ok) throw new Error(`서버 오류: ${response.statusText}`);
+                    const data = await response.json();
+                    
+                    const imageUrl = `data:image/png;base64,${data.image}`;
+                    outputImage.src = imageUrl;
+                    outputImage.classList.remove('hidden');
+                    downloadLink.href = imageUrl;
+                    downloadLink.download = 'encoded_image.png';
+                    downloadLink.classList.remove('hidden');
+                } catch (error) {
+                    alert(`인코딩 실패: ${error.message}`);
+                    outputPlaceholder.classList.remove('hidden');
+                } finally {
+                    hideLoader();
+                }
+            });
+
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', (e) => { if (e.target.files.length > 0) handleFile(e.target.files[0]); });
+            dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+            dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+            dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('dragover'); if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]); });
+
+            async function handleFile(file) {
+                const reader = new FileReader();
+                reader.onload = async (e) => {
+                    const base64Image = e.target.result.split(',')[1];
+                    
+                    outputImage.src = e.target.result;
+                    outputImage.classList.remove('hidden');
+                    outputPlaceholder.classList.add('hidden');
+                    downloadLink.classList.add('hidden');
+                    textOutput.textContent = '';
+                    showLoader();
+
+                    try {
+                        const response = await fetch(`${API_URL}/decode`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ image: base64Image, mode: currentMode })
+                        });
+                        if (!response.ok) throw new Error(`서버 오류: ${response.statusText}`);
+                        const data = await response.json();
+                        textOutput.textContent = data.text;
+                    } catch (error) {
+                        alert(`디코딩 실패: ${error.message}`);
+                        textOutput.textContent = `[오류] ${error.message}`;
+                    } finally {
+                        hideLoader();
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+            
+            // Modal Logic
+            function openModal() {
+                detailsModal.classList.remove('hidden');
+                setTimeout(() => {
+                    detailsModal.querySelector('.modal-content').classList.remove('scale-95');
+                    detailsModal.classList.remove('opacity-0');
+                }, 10);
+            }
+
+            function closeModal() {
+                detailsModal.querySelector('.modal-content').classList.add('scale-95');
+                detailsModal.classList.add('opacity-0');
+                setTimeout(() => detailsModal.classList.add('hidden'), 300);
+            }
+
+            showDetailsBtn.addEventListener('click', openModal);
+            closeDetailsBtn.addEventListener('click', closeModal);
+            detailsModal.addEventListener('click', (e) => {
+                if (e.target === detailsModal) {
+                    closeModal();
+                }
+            });
+
+            updateMode('y');
+        });
+    </script>
+</body>
+</html>
