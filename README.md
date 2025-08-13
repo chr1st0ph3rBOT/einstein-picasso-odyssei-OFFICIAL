@@ -6,6 +6,7 @@ https://drive.google.com/drive/folders/1p2EyQxCJMCiGHDhB0LjuIHfLjvf5jvvE?usp=sha
 
 **Referance**
 RFNNS: Robust Fixed Neural Network Steganography with Popular Deep Generative Models(https://arxiv.org/pdf/2505.04116)
+
 BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding(https://arxiv.org/abs/1810.04805)
 
 
