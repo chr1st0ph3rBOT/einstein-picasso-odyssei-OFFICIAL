@@ -27,10 +27,18 @@ https://huggingface.co/datasets/Salesforce/wikitext/viewer/wikitext-2-raw-v1
 **Needed**
 
 Python 3.11+
+
 PyTorch 2.7.1
+
 Transformers 4.54.0
+
 Datasets 4.0.0
+
 Pillow 11.2.1
+
 NumPy 2.3.1
+
 Matplotlib 3.10.3
+
 Tkinter
+
