@@ -2,6 +2,11 @@
 this is official einstein-picasso-odyssei project repo
 
 
+**How to use it?**
+
+In toWebPage dir, there are index.html and server.py. Execute server.py and wait for loading models(Caution: You need pre-trained model). Then double click the index.html. Have Fun!
+
+
 
 **Model Data**
 
